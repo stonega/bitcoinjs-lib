@@ -595,33 +595,51 @@ class Psbt {
     }
     return this;
   }
-  signAllInputsAsync(keyPair, sighashTypes) {
+  signAllInputsAsync(keyPair, txInfo) {
     return new Promise((resolve, reject) => {
       if (!keyPair || !keyPair.publicKey)
         return reject(new Error('Need Signer to sign input'));
       // TODO: Add a pubkey/pubkeyhash cache to each input
       // as input information is added, then eventually
       // optimize this method.
-      const results = [];
-      const promises = [];
+      const hashes = [];
       for (const [i] of this.data.inputs.entries()) {
-        promises.push(
-          this.signInputAsync(i, keyPair, sighashTypes).then(
-            () => {
-              results.push(true);
-            },
-            () => {
-              results.push(false);
-            },
-          ),
+        if (!keyPair || !keyPair.publicKey)
+          throw new Error('Need Signer to sign input');
+        const { hash, sighashType } = getHashAndSighashType(
+          this.data.inputs,
+          i,
+          keyPair.publicKey,
+          this.__CACHE,
+          [transaction_1.Transaction.SIGHASH_ALL],
         );
+        hashes.push({ hash, sighashType });
       }
-      return Promise.all(promises).then(() => {
-        if (results.every(v => v === false)) {
-          return reject(new Error('No inputs were signed'));
-        }
-        resolve();
-      });
+      if (keyPair.signAll === undefined) {
+        reject(Error('signAll is not implemented'));
+        return;
+      }
+      keyPair
+        .signAll(
+          hashes.map(h => h.hash),
+          txInfo,
+        )
+        .then(signatures => {
+          if (!signatures) reject(Error('signAll is not implemented'));
+          hashes.forEach((value, index) => {
+            const partialSig = [
+              {
+                pubkey: keyPair.publicKey,
+                signature: bscript.signature.encode(
+                  signatures[index],
+                  value.sighashType,
+                ),
+              },
+            ];
+            this.data.updateInput(index, { partialSig });
+            resolve();
+          });
+        });
     });
   }
   signInput(inputIndex, keyPair, sighashTypes) {

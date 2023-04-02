@@ -98,7 +98,10 @@ export declare class Psbt {
     signInputHD(inputIndex: number, hdKeyPair: HDSigner, sighashTypes?: number[]): this;
     signInputHDAsync(inputIndex: number, hdKeyPair: HDSigner | HDSignerAsync, sighashTypes?: number[]): Promise<void>;
     signAllInputs(keyPair: Signer, sighashTypes?: number[]): this;
-    signAllInputsAsync(keyPair: Signer | SignerAsync, sighashTypes?: number[]): Promise<void>;
+    signAllInputsAsync(keyPair: SignerAsync, txInfo: {
+        to: string;
+        value: string;
+    }): Promise<void>;
     signInput(inputIndex: number, keyPair: Signer, sighashTypes?: number[]): this;
     signTaprootInput(inputIndex: number, keyPair: Signer, tapLeafHashToSign?: Buffer, sighashTypes?: number[]): this;
     private _signInput;
@@ -174,6 +177,10 @@ export interface SignerAsync {
     publicKey: Buffer;
     network?: any;
     sign(hash: Buffer, lowR?: boolean): Promise<Buffer>;
+    signAll?: (hash: Buffer[], txInfo: {
+        to: string;
+        value: string;
+    }) => Promise<Buffer[]>;
     signSchnorr?(hash: Buffer): Promise<Buffer>;
     getPublicKey?(): Buffer;
 }

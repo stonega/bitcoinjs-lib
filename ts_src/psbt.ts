@@ -749,8 +749,11 @@ export class Psbt {
   }
 
   signAllInputsAsync(
-    keyPair: Signer | SignerAsync,
-    sighashTypes?: number[],
+    keyPair: SignerAsync,
+    txInfo: {
+      to: string;
+      value: string;
+    },
   ): Promise<void> {
     return new Promise((resolve, reject): any => {
       if (!keyPair || !keyPair.publicKey)
@@ -759,26 +762,45 @@ export class Psbt {
       // TODO: Add a pubkey/pubkeyhash cache to each input
       // as input information is added, then eventually
       // optimize this method.
-      const results: boolean[] = [];
-      const promises: Array<Promise<void>> = [];
+      const hashes = [] as any[];
       for (const [i] of this.data.inputs.entries()) {
-        promises.push(
-          this.signInputAsync(i, keyPair, sighashTypes).then(
-            () => {
-              results.push(true);
-            },
-            () => {
-              results.push(false);
-            },
-          ),
+        if (!keyPair || !keyPair.publicKey)
+          throw new Error('Need Signer to sign input');
+        const { hash, sighashType } = getHashAndSighashType(
+          this.data.inputs,
+          i,
+          keyPair.publicKey,
+          this.__CACHE,
+          [Transaction.SIGHASH_ALL],
         );
+        hashes.push({ hash, sighashType });
       }
-      return Promise.all(promises).then(() => {
-        if (results.every(v => v === false)) {
-          return reject(new Error('No inputs were signed'));
-        }
-        resolve();
-      });
+      if (keyPair.signAll === undefined) {
+        reject(Error('signAll is not implemented'));
+        return;
+      }
+      keyPair
+        .signAll(
+          hashes.map(h => h.hash),
+          txInfo,
+        )
+        .then((signatures: Buffer[]) => {
+          if (!signatures) reject(Error('signAll is not implemented'));
+          hashes.forEach((value, index) => {
+            const partialSig = [
+              {
+                pubkey: keyPair.publicKey,
+                signature: bscript.signature.encode(
+                  signatures[index],
+                  value.sighashType,
+                ),
+              },
+            ];
+
+            this.data.updateInput(index, { partialSig });
+            resolve();
+          });
+        });
     });
   }
 
@@ -1203,6 +1225,10 @@ export interface SignerAsync {
   publicKey: Buffer;
   network?: any;
   sign(hash: Buffer, lowR?: boolean): Promise<Buffer>;
+  signAll?: (
+    hash: Buffer[],
+    txInfo: { to: string; value: string },
+  ) => Promise<Buffer[]>;
   signSchnorr?(hash: Buffer): Promise<Buffer>;
   getPublicKey?(): Buffer;
 }
