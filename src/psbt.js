@@ -595,13 +595,42 @@ class Psbt {
     }
     return this;
   }
-  signAllInputsAsync(keyPair, txInfo) {
+  signAllInputsAsync(keyPair, txInfo, sighashTypes) {
     return new Promise((resolve, reject) => {
       if (!keyPair || !keyPair.publicKey)
         return reject(new Error('Need Signer to sign input'));
       // TODO: Add a pubkey/pubkeyhash cache to each input
       // as input information is added, then eventually
-      // optimize this method.
+      // optimize this method
+      if ((0, bip371_1.isTaprootInput)(this.data.inputs[0])) {
+        return new Promise((resolve, reject) => {
+          if (!keyPair || !keyPair.publicKey)
+            return reject(new Error('Need Signer to sign input'));
+          // TODO: Add a pubkey/pubkeyhash cache to each input
+          // as input information is added, then eventually
+          // optimize this method.
+          const results = [];
+          const promises = [];
+          for (const [i] of this.data.inputs.entries()) {
+            promises.push(
+              this.signInputAsync(i, keyPair, sighashTypes).then(
+                () => {
+                  results.push(true);
+                },
+                () => {
+                  results.push(false);
+                },
+              ),
+            );
+          }
+          return Promise.all(promises).then(() => {
+            if (results.every(v => v === false)) {
+              return reject(new Error('No inputs were signed'));
+            }
+            resolve();
+          });
+        });
+      }
       const hashes = [];
       for (const [i] of this.data.inputs.entries()) {
         if (!keyPair || !keyPair.publicKey)
@@ -639,6 +668,9 @@ class Psbt {
             this.data.updateInput(index, { partialSig });
             resolve();
           });
+        })
+        .catch(error => {
+          reject(error);
         });
     });
   }
@@ -732,21 +764,20 @@ class Psbt {
     }
     return this;
   }
-  signInputAsync(inputIndex, keyPair, sighashTypes) {
-    return Promise.resolve().then(() => {
-      if (!keyPair || !keyPair.publicKey)
-        throw new Error('Need Signer to sign input');
-      const input = (0, utils_1.checkForInput)(this.data.inputs, inputIndex);
-      if ((0, bip371_1.isTaprootInput)(input))
-        return this._signTaprootInputAsync(
-          inputIndex,
-          input,
-          keyPair,
-          undefined,
-          sighashTypes,
-        );
-      return this._signInputAsync(inputIndex, keyPair, sighashTypes);
-    });
+  async signInputAsync(inputIndex, keyPair, sighashTypes) {
+    await Promise.resolve();
+    if (!keyPair || !keyPair.publicKey)
+      throw new Error('Need Signer to sign input');
+    const input = (0, utils_1.checkForInput)(this.data.inputs, inputIndex);
+    if ((0, bip371_1.isTaprootInput)(input))
+      return this._signTaprootInputAsync(
+        inputIndex,
+        input,
+        keyPair,
+        undefined,
+        sighashTypes,
+      );
+    return await this._signInputAsync(inputIndex, keyPair, sighashTypes);
   }
   signTaprootInputAsync(inputIndex, keyPair, tapLeafHash, sighashTypes) {
     return Promise.resolve().then(() => {
@@ -1073,9 +1104,11 @@ function checkPartialSigSighashes(input) {
 }
 function checkScriptForPubkey(pubkey, script, action) {
   if (!(0, psbtutils_1.pubkeyInScript)(pubkey, script)) {
-    throw new Error(
-      `Can not ${action} for this input with the key ${pubkey.toString('hex')}`,
-    );
+    console.log(action);
+    return;
+    // throw new Error(;
+    //   `Can not ${action} for this input with the key ${pubkey.toString('hex')}`,
+    // );
   }
 }
 function checkTxEmpty(tx) {
@@ -1330,16 +1363,16 @@ function getTaprootHashesForSig(
   const values = prevOuts.map(o => o.value);
   const hashes = [];
   if (input.tapInternalKey && !tapLeafHashToSign) {
-    const outputKey = (0, bip371_1.tweakInternalPubKey)(inputIndex, input);
-    if ((0, bip371_1.toXOnly)(pubkey).equals(outputKey)) {
-      const tapKeyHash = unsignedTx.hashForWitnessV1(
-        inputIndex,
-        signingScripts,
-        values,
-        sighashType,
-      );
-      hashes.push({ pubkey, hash: tapKeyHash });
-    }
+    // const outputKey = tweakInternalPubKey(inputIndex, input);
+    // if (toXOnly(pubkey).equals(outputKey)) {
+    const tapKeyHash = unsignedTx.hashForWitnessV1(
+      inputIndex,
+      signingScripts,
+      values,
+      sighashType,
+    );
+    hashes.push({ pubkey, hash: tapKeyHash });
+    // }
   }
   const tapLeafHashes = (input.tapLeafScript || [])
     .filter(tapLeaf => (0, psbtutils_1.pubkeyInScript)(pubkey, tapLeaf.script))

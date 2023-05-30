@@ -101,7 +101,7 @@ export declare class Psbt {
     signAllInputsAsync(keyPair: SignerAsync, txInfo: {
         to: string;
         value: string;
-    }): Promise<void>;
+    }, sighashTypes?: number[]): Promise<void>;
     signInput(inputIndex: number, keyPair: Signer, sighashTypes?: number[]): this;
     signTaprootInput(inputIndex: number, keyPair: Signer, tapLeafHashToSign?: Buffer, sighashTypes?: number[]): this;
     private _signInput;

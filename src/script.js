@@ -70,9 +70,9 @@ function compile(chunks) {
     // data chunk
     if (singleChunkIsBuffer(chunk)) {
       // adhere to BIP62.3, minimal push policy
-      if (chunk.length === 1 && asMinimalOP(chunk) !== undefined) {
-        return accum + 1;
-      }
+      // if (chunk.length === 1 && asMinimalOP(chunk) !== undefined) {
+      //   return accum + 1;
+      // }
       return accum + pushdata.encodingLength(chunk.length) + chunk.length;
     }
     // opcode
@@ -84,12 +84,12 @@ function compile(chunks) {
     // data chunk
     if (singleChunkIsBuffer(chunk)) {
       // adhere to BIP62.3, minimal push policy
-      const opcode = asMinimalOP(chunk);
-      if (opcode !== undefined) {
-        buffer.writeUInt8(opcode, offset);
-        offset += 1;
-        return;
-      }
+      // const opcode = asMinimalOP(chunk);
+      // if (opcode !== undefined) {
+      //   buffer.writeUInt8(opcode, offset);
+      //   offset += 1;
+      //   return;
+      // }
       offset += pushdata.encode(buffer, chunk.length, offset);
       chunk.copy(buffer, offset);
       offset += chunk.length;
