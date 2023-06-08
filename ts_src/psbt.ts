@@ -756,42 +756,41 @@ export class Psbt {
     },
     sighashTypes?: number[],
   ): Promise<void> {
+    // TODO: Add a pubkey/pubkeyhash cache to each input
+    // as input information is added, then eventually
+    // optimize this method
+    if (isTaprootInput(this.data.inputs[0])) {
+      return new Promise<void>((resolve, reject): any => {
+        if (!keyPair || !keyPair.publicKey)
+          return reject(new Error('Need Signer to sign input'));
+        // TODO: Add a pubkey/pubkeyhash cache to each input
+        // as input information is added, then eventually
+        // optimize this method.
+        const results: boolean[] = [];
+        const promises: Array<Promise<void>> = [];
+        for (const [i] of this.data.inputs.entries()) {
+          promises.push(
+            this.signInputAsync(i, keyPair, sighashTypes).then(
+              () => {
+                results.push(true);
+              },
+              () => {
+                results.push(false);
+              },
+            ),
+          );
+        }
+        return Promise.all(promises).then(() => {
+          if (results.every(v => v === false)) {
+            return reject(new Error('No inputs were signed'));
+          }
+          resolve();
+        });
+      });
+    }
     return new Promise((resolve, reject): any => {
       if (!keyPair || !keyPair.publicKey)
         return reject(new Error('Need Signer to sign input'));
-
-      // TODO: Add a pubkey/pubkeyhash cache to each input
-      // as input information is added, then eventually
-      // optimize this method
-      if (isTaprootInput(this.data.inputs[0])) {
-        return new Promise<void>((resolve, reject): any => {
-          if (!keyPair || !keyPair.publicKey)
-            return reject(new Error('Need Signer to sign input'));
-          // TODO: Add a pubkey/pubkeyhash cache to each input
-          // as input information is added, then eventually
-          // optimize this method.
-          const results: boolean[] = [];
-          const promises: Array<Promise<void>> = [];
-          for (const [i] of this.data.inputs.entries()) {
-            promises.push(
-              this.signInputAsync(i, keyPair, sighashTypes).then(
-                () => {
-                  results.push(true);
-                },
-                () => {
-                  results.push(false);
-                },
-              ),
-            );
-          }
-          return Promise.all(promises).then(() => {
-            if (results.every(v => v === false)) {
-              return reject(new Error('No inputs were signed'));
-            }
-            resolve();
-          });
-        });
-      }
       const hashes = [] as any[];
       for (const [i] of this.data.inputs.entries()) {
         if (!keyPair || !keyPair.publicKey)
